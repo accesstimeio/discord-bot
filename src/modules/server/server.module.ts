@@ -8,6 +8,6 @@ import { DiscordService } from "../discord/discord.service";
 @Module({
     imports: [AccessTimeModule, DiscordService],
     providers: [ServerService],
-    exports: []
+    exports: [ServerService]
 })
 export class ServerModule {}

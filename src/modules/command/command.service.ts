@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ChatInputCommandInteraction, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
 import { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
+import { getAddress, Hash, isAddress } from "viem";
 
 import * as schema from "src/db/schema";
 import { servers } from "src/db/schema";
@@ -42,7 +43,13 @@ export class CommandService implements OnModuleInit {
             .addStringOption((option) =>
                 option
                     .setName("project_id")
-                    .setDescription("Your AccessTime Project ID")
+                    .setDescription("Your AccessTime Project Id")
+                    .setRequired(true)
+            )
+            .addStringOption((option) =>
+                option
+                    .setName("chain_id")
+                    .setDescription("Your AccessTime Chain Id")
                     .setRequired(true)
             )
             .addRoleOption((option) =>
@@ -57,7 +64,9 @@ export class CommandService implements OnModuleInit {
 
             try {
                 const projectId = interaction.options.getString("project_id");
+                const chainId = interaction.options.getString("chain_id");
                 const role = interaction.options.getRole("role");
+                const nonce = this.walletService.generateNonce();
 
                 if (!projectId || !role) {
                     return interaction.editReply("Project ID and role are required.");
@@ -68,20 +77,24 @@ export class CommandService implements OnModuleInit {
                     .values({
                         discordServerId: interaction.guildId,
                         accessTimeProjectId: projectId,
+                        accessTimeChainId: chainId,
                         subscriberRoleId: role.id,
+                        nonce,
                         isVerified: false
                     })
                     .onConflictDoUpdate({
                         target: [servers.discordServerId],
                         set: {
                             accessTimeProjectId: projectId,
+                            accessTimeChainId: chainId,
                             subscriberRoleId: role.id,
+                            nonce,
                             updatedAt: new Date()
                         }
                     });
 
                 await interaction.editReply(
-                    `Bot configured successfully! Use \`/verify\` to verify ownership of your AccessTime project.`
+                    `Bot configured successfully! Use \`/verify\` with Nonce: ${nonce} to verify ownership of your AccessTime project.`
                 );
             } catch (error) {
                 this.logger.error("Error in setup command:", error);
@@ -123,7 +136,9 @@ export class CommandService implements OnModuleInit {
                 // Verify ownership
                 const isVerified = await this.accessTimeService.verifyProjectOwnership(
                     serverData.accessTimeProjectId,
-                    signature
+                    serverData.accessTimeChainId,
+                    serverData.nonce,
+                    signature as Hash
                 );
 
                 if (!isVerified) {
@@ -158,36 +173,18 @@ export class CommandService implements OnModuleInit {
     linkWallet = () => ({
         data: new SlashCommandBuilder()
             .setName("linkwallet")
-            .setDescription("Link your wallet to receive subscriber roles")
-            .addStringOption((option) =>
-                option
-                    .setName("wallet")
-                    .setDescription("Your Ethereum wallet address")
-                    .setRequired(true)
-            ),
+            .setDescription("Link your wallet to receive subscriber roles"),
         execute: async (interaction: ChatInputCommandInteraction) => {
             await interaction.deferReply({ ephemeral: true });
 
             try {
-                const walletAddress = interaction.options.getString("wallet");
-
-                if (!walletAddress) {
-                    return interaction.editReply("Wallet address is required.");
-                }
-
-                // Validate Ethereum address format
-                if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
-                    return interaction.editReply("Invalid Ethereum wallet address format.");
-                }
-
                 // Generate message to sign
                 const messageToSign = await this.walletService.initiateWalletLinking(
                     interaction.guildId,
-                    interaction.user.id,
-                    walletAddress
+                    interaction.user.id
                 );
 
-                await interaction.editReply({
+                return await interaction.editReply({
                     content: `Please sign this message with your wallet to complete the verification:\n\`\`\`\n${messageToSign}\n\`\`\`\nAfter signing, use \`/completelinkwallet\` with your signature.`
                 });
             } catch (error) {
@@ -224,12 +221,17 @@ export class CommandService implements OnModuleInit {
                     return interaction.editReply("Signature and wallet address are required.");
                 }
 
+                // Validate Ethereum address format
+                if (!isAddress(walletAddress)) {
+                    return interaction.editReply("Invalid Ethereum wallet address format.");
+                }
+
                 // Complete wallet linking
                 const success = await this.walletService.completeWalletLinking(
                     interaction.guildId,
                     interaction.user.id,
-                    walletAddress,
-                    signature
+                    getAddress(walletAddress),
+                    signature as Hash
                 );
 
                 if (!success) {
@@ -360,8 +362,13 @@ export class CommandService implements OnModuleInit {
                     title: "AccessTime Bot Status",
                     fields: [
                         {
-                            name: "Project ID",
+                            name: "Project Id",
                             value: serverData.accessTimeProjectId || "Not configured",
+                            inline: true
+                        },
+                        {
+                            name: "Chain Id",
+                            value: serverData.accessTimeChainId || "Not configured",
                             inline: true
                         },
                         {
