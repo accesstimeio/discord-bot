@@ -12,9 +12,11 @@ export class WalletService {
 
     verifySignature() {}
 
-    initiateWalletLinking() {}
+    initiateWalletLinking(serverId: string, userId: string, walletAddress: string) {}
 
-    completeWalletLinking() {}
+    completeWalletLinking(serverId: string, userId: string, walletAddress: string, signature: string): boolean {}
 
-    unlinkWallet() {}
+    unlinkWallet(serverId: string, userId: string): boolean {}
+
+    getWalletByDiscordId(serverId: string, userId: string): string {}
 }

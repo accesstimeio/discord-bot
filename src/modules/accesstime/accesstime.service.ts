@@ -8,7 +8,12 @@ export class AccessTimeService {
 
     fetchSubscriptions() {}
 
-    verifyProjectOwnership() {}
+    async verifyProjectOwnership(projectId: string, signature: string): boolean {}
 
-    syncSubscriptions() {}
+    async syncSubscriptions(serverId: string) {
+        return {
+            added: [],
+            removed: []
+        };
+    }
 }
