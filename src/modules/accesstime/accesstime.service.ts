@@ -1,17 +1,23 @@
-import { AccessTime, Factory } from "@accesstimeio/accesstime-sdk";
+import { AccessTime } from "@accesstimeio/accesstime-sdk";
 import { Injectable, Logger } from "@nestjs/common";
 import { eq } from "drizzle-orm";
-import { Hash, verifyMessage } from "viem";
+import { Address, Hash, isAddress, verifyMessage, zeroAddress } from "viem";
 
 import { servers, subscriptions } from "src/db/schema";
 
 import { DatabaseService } from "../database/database.service";
+import { FactoryService } from "../factory/factory.service";
+import { DiscordService } from "../discord/discord.service";
 
 @Injectable()
 export class AccessTimeService {
     private readonly logger = new Logger(AccessTimeService.name);
 
-    constructor(private readonly databaseService: DatabaseService) {}
+    constructor(
+        private readonly databaseService: DatabaseService,
+        private readonly factoryService: FactoryService,
+        private readonly discordService: DiscordService
+    ) {}
 
     generateOwnershipSignatureMessage(projectId: string, chainId: string, nonce: string) {
         return `Verify your wallet for AccessTime Discord Bot Ownership Verify\nProjectId: ${projectId}\nChainId: ${chainId}\nNonce: ${nonce}`;
@@ -24,10 +30,9 @@ export class AccessTimeService {
         signature: Hash
     ): Promise<boolean> {
         try {
-            const factory = new Factory({
-                id: Number(chainId)
-            });
-            const accessTime = await factory.read.contracts([BigInt(projectId)]);
+            const accessTime = await this.factoryService.client[Number(chainId)].read.contracts([
+                BigInt(projectId)
+            ]);
 
             const contract = new AccessTime({
                 accessTime,
@@ -48,11 +53,30 @@ export class AccessTimeService {
         }
     }
 
-    async syncSubscriptions(serverId: string) {
-        const result = {
-            added: [],
-            removed: []
-        };
+    async fetchSubscription(projectId: string, chainId: string, user: Address) {
+        try {
+            const accessTime = await this.factoryService.client[Number(chainId)].read.contracts([
+                BigInt(projectId)
+            ]);
+
+            const contract = new AccessTime({
+                accessTime,
+                chain: {
+                    id: Number(chainId)
+                }
+            });
+            const endTime = await contract.read.accessTimes([user]);
+
+            return Number(endTime.toString());
+        } catch (error) {
+            this.logger.error("Error in fetchSubscription:", error);
+            return 0;
+        }
+    }
+
+    async syncSubscriptions(serverId: string, subscriberRoleId: string) {
+        let added: number = 0;
+        let removed: number = 0;
 
         try {
             // Get server info
@@ -66,19 +90,21 @@ export class AccessTimeService {
 
             // Get all users with linked wallets for this server
             const usersWithWallets = await this.databaseService.drizzle.query.users.findMany({
-                where: (users, { isNotNull }) => isNotNull(users.walletAddress)
+                where: (users, { not }) => not(eq(users.walletAddress, zeroAddress))
             });
 
+            const nowTime = Math.floor(Date.now() / 1000);
+
             for (const user of usersWithWallets) {
+                if (!isAddress(user.walletAddress)) {
+                    continue;
+                }
+
                 // Check if user has active subscription
-                const subscriptionData = await this.fetchSubscriptions(
+                const subscriptionEndTime = await this.fetchSubscription(
                     serverData.accessTimeProjectId,
                     serverData.accessTimeChainId,
                     user.walletAddress
-                );
-
-                const hasActiveSubscription = subscriptionData.some(
-                    (sub) => sub.status === "active"
                 );
 
                 // Existing subscription record
@@ -91,12 +117,22 @@ export class AccessTimeService {
                             )
                     });
 
-                if (hasActiveSubscription) {
+                if (subscriptionEndTime > nowTime) {
                     // User should have the role
                     if (
                         !existingSubscription ||
                         existingSubscription.subscriptionStatus !== "active"
                     ) {
+                        const operationStatus = await this.discordService.assignRole(
+                            serverId,
+                            user.discordId,
+                            subscriberRoleId
+                        );
+
+                        if (!operationStatus) {
+                            continue;
+                        }
+
                         // Update or create subscription record
                         await this.databaseService.drizzle
                             .insert(subscriptions)
@@ -104,24 +140,34 @@ export class AccessTimeService {
                                 userId: user.id,
                                 serverId: serverData.id,
                                 subscriptionStatus: "active",
-                                expiresAt: new Date(subscriptionData[0].expiresAt),
+                                expiresAt: new Date(subscriptionEndTime),
                                 updatedAt: new Date()
                             })
                             .onConflictDoUpdate({
                                 target: [subscriptions.userId, subscriptions.serverId],
                                 set: {
                                     subscriptionStatus: "active",
-                                    expiresAt: new Date(subscriptionData[0].expiresAt),
+                                    expiresAt: new Date(subscriptionEndTime),
                                     updatedAt: new Date()
                                 }
                             });
 
-                        result.added.push(user.discordId);
+                        added++;
                     }
                 } else if (
                     existingSubscription &&
                     existingSubscription.subscriptionStatus === "active"
                 ) {
+                    const operationStatus = await this.discordService.removeRole(
+                        serverId,
+                        user.discordId,
+                        subscriberRoleId
+                    );
+
+                    if (!operationStatus) {
+                        continue;
+                    }
+
                     // Update subscription to expired
                     await this.databaseService.drizzle
                         .update(subscriptions)
@@ -131,7 +177,7 @@ export class AccessTimeService {
                         })
                         .where(eq(subscriptions.id, existingSubscription.id));
 
-                    result.removed.push(user.discordId);
+                    removed++;
                 }
             }
 
@@ -144,7 +190,10 @@ export class AccessTimeService {
                 })
                 .where(eq(servers.id, serverData.id));
 
-            return result;
+            return {
+                added,
+                removed
+            };
         } catch (error) {
             this.logger.error(`Error syncing subscriptions for server ${serverId}:`, error);
             throw error;

@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ChatInputCommandInteraction, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
 import { eq } from "drizzle-orm";
-import { getAddress, Hash, isAddress, zeroHash } from "viem";
+import { getAddress, Hash, isAddress, zeroAddress, zeroHash } from "viem";
 
 import { servers } from "src/db/schema";
 
@@ -10,6 +10,7 @@ import { AccessTimeService } from "../accesstime/accesstime.service";
 import { WalletService } from "../wallet/wallet.service";
 import { ServerService } from "../server/server.service";
 import { DatabaseService } from "../database/database.service";
+import { isSupportedChainId } from "@accesstimeio/accesstime-common";
 
 @Injectable()
 export class CommandService implements OnModuleInit {
@@ -67,9 +68,14 @@ export class CommandService implements OnModuleInit {
                 const role = interaction.options.getRole("role");
                 const nonce = this.walletService.generateNonce();
 
-                if (!projectId || !role) {
-                    return interaction.editReply("Project ID and role are required.");
+                if (!projectId || !role || !chainId) {
+                    return interaction.editReply("Project Id, Chain Id and role are required.");
                 }
+
+                if (!isSupportedChainId(Number(chainId))) {
+                    return interaction.editReply("Chain Id is not supported.");
+                }
+
                 // Save server configuration
                 await this.databaseService.drizzle
                     .insert(servers)
@@ -348,7 +354,7 @@ export class CommandService implements OnModuleInit {
                 // Get role info
                 let roleInfo = "Not configured";
                 if (serverData.subscriberRoleId) {
-                    const role = await interaction.guild.roles.fetch(serverData.subscriberRoleId);
+                    const role = await interaction.guild?.roles.fetch(serverData.subscriberRoleId); // todo: interaction.guild comes as null?
                     roleInfo = role ? `@${role.name}` : "Role not found";
                 }
 
@@ -357,9 +363,10 @@ export class CommandService implements OnModuleInit {
                     interaction.guildId,
                     interaction.user.id
                 );
-                const walletInfo = userWallet
-                    ? `${userWallet.slice(0, 6)}...${userWallet.slice(-4)}`
-                    : "No wallet linked";
+                const walletInfo =
+                    userWallet && userWallet != zeroAddress
+                        ? `${userWallet.slice(0, 6)}...${userWallet.slice(-4)}`
+                        : "No wallet linked";
 
                 const infoEmbed = {
                     title: "AccessTime Bot Status",

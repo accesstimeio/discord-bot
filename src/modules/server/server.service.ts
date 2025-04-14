@@ -2,7 +2,6 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 
 import { AccessTimeService } from "../accesstime/accesstime.service";
-import { DiscordService } from "../discord/discord.service";
 import { DatabaseService } from "../database/database.service";
 
 @Injectable()
@@ -12,7 +11,6 @@ export class ServerService {
 
     constructor(
         private readonly accessTimeService: AccessTimeService,
-        private readonly discordService: DiscordService,
         private readonly databaseService: DatabaseService
     ) {}
 
@@ -29,7 +27,7 @@ export class ServerService {
                 for (const server of allServers) {
                     try {
                         if (server.subscriberRoleId) {
-                            const syncResult = await this.sync(
+                            const syncResult = await this.accessTimeService.syncSubscriptions(
                                 server.discordServerId,
                                 server.subscriberRoleId
                             );
@@ -59,33 +57,12 @@ export class ServerService {
                 throw new Error("Server not configured or not verified");
             }
 
-            return await this.sync(serverId, server.subscriberRoleId);
+            return await this.accessTimeService.syncSubscriptions(
+                serverId,
+                server.subscriberRoleId
+            );
         } catch (error) {
             this.logger.error(`Error in manual sync for server ${serverId}:`, error);
-            throw error;
-        }
-    }
-
-    private async sync(serverId: string, subscriberRoleId: string) {
-        try {
-            // Sync subscriptions with AccessTime
-            const syncResult = await this.accessTimeService.syncSubscriptions(serverId);
-
-            // Apply role changes
-            for (const discordId of syncResult.added) {
-                await this.discordService.assignRole(serverId, discordId, subscriberRoleId);
-            }
-
-            for (const discordId of syncResult.removed) {
-                await this.discordService.removeRole(serverId, discordId, subscriberRoleId);
-            }
-
-            return {
-                added: syncResult.added.length,
-                removed: syncResult.removed.length
-            };
-        } catch (error) {
-            this.logger.error(`Error in sync for server ${serverId}:`, error);
             throw error;
         }
     }

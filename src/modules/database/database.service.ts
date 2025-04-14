@@ -1,5 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { drizzle, NodePgDatabase } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { resolve } from "path";
 import { Pool } from "pg";
 
 import schema from "src/db/schema";
@@ -22,6 +24,12 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         try {
             await this.pool.query("SELECT NOW()");
             this.logger.log("Database connection established");
+
+            await migrate(this.drizzle, {
+                migrationsFolder: resolve("src/db/migrations"),
+                migrationsSchema: resolve("src/db/schema"),
+                migrationsTable: "__migrations"
+            });
         } catch (error) {
             this.logger.error("Failed to connect to database:", error);
             throw error;
