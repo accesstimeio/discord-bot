@@ -353,9 +353,27 @@ export class CommandService implements OnModuleInit {
 
                 // Get role info
                 let roleInfo = "Not configured";
-                if (serverData.subscriberRoleId) {
-                    const role = await interaction.guild?.roles.fetch(serverData.subscriberRoleId); // todo: interaction.guild comes as null?
-                    roleInfo = role ? `@${role.name}` : "Role not found";
+                let guildScope: boolean = false;
+                let botCorrectRoleHierarchy = false;
+                if (interaction.guild) {
+                    guildScope = true;
+
+                    if (serverData.subscriberRoleId) {
+                        const role = await interaction.guild.roles.fetch(
+                            serverData.subscriberRoleId
+                        ); // todo: interaction.guild comes as null?
+                        roleInfo = role ? `@${role.name}` : "Role not found";
+
+                        if (role) {
+                            const botMember = await interaction.guild.members.fetchMe();
+                            const targetRole = await interaction.guild.roles.fetch(
+                                serverData.subscriberRoleId
+                            );
+                            if (botMember.roles.highest.position > targetRole.position) {
+                                botCorrectRoleHierarchy = true;
+                            }
+                        }
+                    }
                 }
 
                 // Get user wallet info
@@ -401,6 +419,16 @@ export class CommandService implements OnModuleInit {
                             value: serverData.lastSyncAt
                                 ? new Date(serverData.lastSyncAt).toLocaleString()
                                 : "Never",
+                            inline: true
+                        },
+                        {
+                            name: "Guild Scope",
+                            value: guildScope ? "✅ Correct" : "❌ Invalid",
+                            inline: true
+                        },
+                        {
+                            name: "Bot Role Hierarchy",
+                            value: botCorrectRoleHierarchy ? "✅ Correct" : "❌ Invalid",
                             inline: true
                         }
                     ],
