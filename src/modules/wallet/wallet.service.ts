@@ -107,7 +107,7 @@ export class WalletService {
                 .update(users)
                 .set({
                     walletAddress,
-                    nonce: null, // Clear nonce after successful verification
+                    nonce: "0x", // Clear nonce after successful verification
                     updatedAt: new Date()
                 })
                 .where(eq(users.id, user.id));
@@ -128,7 +128,7 @@ export class WalletService {
             const result = await this.databaseService.drizzle
                 .update(users)
                 .set({
-                    walletAddress: null,
+                    walletAddress: zeroAddress,
                     updatedAt: new Date()
                 })
                 .where(and(eq(users.discordId, discordId), eq(users.serverId, existingServer.id)));
