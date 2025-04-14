@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ScheduleModule } from "@nestjs/schedule";
 import { ConfigModule } from "@nestjs/config";
-import Joi from "joi";
+import * as Joi from "joi";
 
 import { AppController } from "./app.controller";
 import { CommandModule } from "./modules/command/command.module";
