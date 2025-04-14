@@ -1,17 +1,17 @@
 import { AccessTime, Factory } from "@accesstimeio/accesstime-sdk";
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { eq } from "drizzle-orm";
-import { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Hash, verifyMessage } from "viem";
 
-import * as schema from "src/db/schema";
 import { servers, subscriptions } from "src/db/schema";
+
+import { DatabaseService } from "../database/database.service";
 
 @Injectable()
 export class AccessTimeService {
     private readonly logger = new Logger(AccessTimeService.name);
 
-    constructor(@Inject("DB_PROD") private database: NodePgDatabase<typeof schema>) {}
+    constructor(private readonly databaseService: DatabaseService) {}
 
     generateOwnershipSignatureMessage(projectId: string, chainId: string, nonce: string) {
         return `Verify your wallet for AccessTime Discord Bot Ownership Verify\nProjectId: ${projectId}\nChainId: ${chainId}\nNonce: ${nonce}`;
@@ -56,7 +56,7 @@ export class AccessTimeService {
 
         try {
             // Get server info
-            const serverData = await this.database.query.servers.findFirst({
+            const serverData = await this.databaseService.drizzle.query.servers.findFirst({
                 where: eq(servers.discordServerId, serverId)
             });
 
@@ -65,7 +65,7 @@ export class AccessTimeService {
             }
 
             // Get all users with linked wallets for this server
-            const usersWithWallets = await this.database.query.users.findMany({
+            const usersWithWallets = await this.databaseService.drizzle.query.users.findMany({
                 where: (users, { isNotNull }) => isNotNull(users.walletAddress)
             });
 
@@ -82,13 +82,14 @@ export class AccessTimeService {
                 );
 
                 // Existing subscription record
-                const existingSubscription = await this.database.query.subscriptions.findFirst({
-                    where: (subscriptions, { and, eq }) =>
-                        and(
-                            eq(subscriptions.userId, user.id),
-                            eq(subscriptions.serverId, serverData.id)
-                        )
-                });
+                const existingSubscription =
+                    await this.databaseService.drizzle.query.subscriptions.findFirst({
+                        where: (subscriptions, { and, eq }) =>
+                            and(
+                                eq(subscriptions.userId, user.id),
+                                eq(subscriptions.serverId, serverData.id)
+                            )
+                    });
 
                 if (hasActiveSubscription) {
                     // User should have the role
@@ -97,13 +98,14 @@ export class AccessTimeService {
                         existingSubscription.subscriptionStatus !== "active"
                     ) {
                         // Update or create subscription record
-                        await this.database
+                        await this.databaseService.drizzle
                             .insert(subscriptions)
                             .values({
                                 userId: user.id,
                                 serverId: serverData.id,
                                 subscriptionStatus: "active",
-                                expiresAt: new Date(subscriptionData[0].expiresAt)
+                                expiresAt: new Date(subscriptionData[0].expiresAt),
+                                updatedAt: new Date()
                             })
                             .onConflictDoUpdate({
                                 target: [subscriptions.userId, subscriptions.serverId],
@@ -121,7 +123,7 @@ export class AccessTimeService {
                     existingSubscription.subscriptionStatus === "active"
                 ) {
                     // Update subscription to expired
-                    await this.database
+                    await this.databaseService.drizzle
                         .update(subscriptions)
                         .set({
                             subscriptionStatus: "expired",
@@ -134,7 +136,7 @@ export class AccessTimeService {
             }
 
             // Update last sync time
-            await this.database
+            await this.databaseService.drizzle
                 .update(servers)
                 .set({
                     lastSyncAt: new Date(),

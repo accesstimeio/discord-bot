@@ -1,11 +1,9 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
-import { NodePgDatabase } from "drizzle-orm/node-postgres";
-
-import * as schema from "src/db/schema";
+import { Injectable, Logger } from "@nestjs/common";
+import { Cron, CronExpression } from "@nestjs/schedule";
 
 import { AccessTimeService } from "../accesstime/accesstime.service";
 import { DiscordService } from "../discord/discord.service";
-import { Cron, CronExpression } from "@nestjs/schedule";
+import { DatabaseService } from "../database/database.service";
 
 @Injectable()
 export class ServerService {
@@ -13,9 +11,9 @@ export class ServerService {
     private syncAllBusy: boolean = false;
 
     constructor(
-        @Inject("DB_PROD") private database: NodePgDatabase<typeof schema>,
         private readonly accessTimeService: AccessTimeService,
-        private readonly discordService: DiscordService
+        private readonly discordService: DiscordService,
+        private readonly databaseService: DatabaseService
     ) {}
 
     @Cron(CronExpression.EVERY_5_MINUTES)
@@ -23,7 +21,7 @@ export class ServerService {
         if (!this.syncAllBusy) {
             this.syncAllBusy = true;
             try {
-                const allServers = await this.database.query.servers.findMany({
+                const allServers = await this.databaseService.drizzle.query.servers.findMany({
                     where: (servers, { eq }) => eq(servers.isVerified, true)
                 });
 
@@ -53,7 +51,7 @@ export class ServerService {
 
     async manualSync(serverId: string) {
         try {
-            const server = await this.database.query.servers.findFirst({
+            const server = await this.databaseService.drizzle.query.servers.findFirst({
                 where: (servers, { eq }) => eq(servers.discordServerId, serverId)
             });
 

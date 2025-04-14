@@ -1,17 +1,17 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { randomBytes } from "crypto";
 import { and, eq } from "drizzle-orm";
-import { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { Address, Hash, verifyMessage } from "viem";
+import { Address, Hash, verifyMessage, zeroAddress } from "viem";
 
-import * as schema from "src/db/schema";
-import { servers, users } from "src/db/schema";
+import { users, servers } from "src/db/schema";
+
+import { DatabaseService } from "../database/database.service";
 
 @Injectable()
 export class WalletService {
     private readonly logger = new Logger(WalletService.name);
 
-    constructor(@Inject("DB_PROD") private database: NodePgDatabase<typeof schema>) {}
+    constructor(private readonly databaseService: DatabaseService) {}
 
     generateNonce(): string {
         return randomBytes(16).toString("hex");
@@ -34,18 +34,18 @@ export class WalletService {
             // Generate nonce
             const nonce = this.generateNonce();
 
-            const existingServer = await this.database.query.servers.findFirst({
+            const existingServer = await this.databaseService.drizzle.query.servers.findFirst({
                 where: eq(servers.discordServerId, serverId)
             });
 
             // Check if user exists
-            const existingUser = await this.database.query.users.findFirst({
+            const existingUser = await this.databaseService.drizzle.query.users.findFirst({
                 where: eq(users.discordId, discordId)
             });
 
             if (existingUser) {
                 // Update existing user
-                await this.database
+                await this.databaseService.drizzle
                     .update(users)
                     .set({
                         nonce,
@@ -56,10 +56,13 @@ export class WalletService {
                     );
             } else {
                 // Create new user
-                await this.database.insert(users).values({
+                await this.databaseService.drizzle.insert(users).values({
+                    walletAddress: zeroAddress,
                     discordId,
                     serverId: existingServer.id,
-                    nonce
+                    nonce,
+                    updatedAt: new Date(),
+                    createdAt: new Date()
                 });
             }
 
@@ -78,12 +81,12 @@ export class WalletService {
         signature: Hash
     ) {
         try {
-            const existingServer = await this.database.query.servers.findFirst({
+            const existingServer = await this.databaseService.drizzle.query.servers.findFirst({
                 where: eq(servers.discordServerId, serverId)
             });
 
             // Get user and nonce
-            const user = await this.database.query.users.findFirst({
+            const user = await this.databaseService.drizzle.query.users.findFirst({
                 where: and(eq(users.discordId, discordId), eq(users.serverId, existingServer.id))
             });
 
@@ -100,7 +103,7 @@ export class WalletService {
             }
 
             // Update user with wallet address
-            await this.database
+            await this.databaseService.drizzle
                 .update(users)
                 .set({
                     walletAddress,
@@ -118,11 +121,11 @@ export class WalletService {
 
     async unlinkWallet(serverId: string, discordId: string) {
         try {
-            const existingServer = await this.database.query.servers.findFirst({
+            const existingServer = await this.databaseService.drizzle.query.servers.findFirst({
                 where: eq(servers.discordServerId, serverId)
             });
 
-            const result = await this.database
+            const result = await this.databaseService.drizzle
                 .update(users)
                 .set({
                     walletAddress: null,
@@ -139,11 +142,11 @@ export class WalletService {
 
     async getWalletByDiscordId(serverId: string, discordId: string) {
         try {
-            const existingServer = await this.database.query.servers.findFirst({
+            const existingServer = await this.databaseService.drizzle.query.servers.findFirst({
                 where: eq(servers.discordServerId, serverId)
             });
 
-            const user = await this.database.query.users.findFirst({
+            const user = await this.databaseService.drizzle.query.users.findFirst({
                 where: and(eq(users.discordId, discordId), eq(users.serverId, existingServer.id))
             });
 

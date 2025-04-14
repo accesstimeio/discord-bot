@@ -5,6 +5,6 @@ export const subscriptions = pgTable("subscriptions", {
     userId: integer("user_id").notNull(), // Reference to users table
     serverId: integer("server_id").notNull(), // Reference to servers table
     subscriptionStatus: text("subscription_status").notNull(), // active, expired, etc.
-    expiresAt: timestamp("expires_at"),
-    updatedAt: timestamp("updated_at").defaultNow()
+    expiresAt: timestamp("expires_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull()
 });

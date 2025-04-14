@@ -1,27 +1,26 @@
-import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ChatInputCommandInteraction, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
-import { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
-import { getAddress, Hash, isAddress } from "viem";
+import { getAddress, Hash, isAddress, zeroHash } from "viem";
 
-import * as schema from "src/db/schema";
 import { servers } from "src/db/schema";
 
 import { DiscordService } from "../discord/discord.service";
 import { AccessTimeService } from "../accesstime/accesstime.service";
 import { WalletService } from "../wallet/wallet.service";
 import { ServerService } from "../server/server.service";
+import { DatabaseService } from "../database/database.service";
 
 @Injectable()
 export class CommandService implements OnModuleInit {
     private readonly logger = new Logger(CommandService.name);
 
     constructor(
-        @Inject("DB_PROD") private database: NodePgDatabase<typeof schema>,
         private readonly discordService: DiscordService,
         private readonly accessTimeService: AccessTimeService,
         private readonly walletService: WalletService,
-        private readonly serverService: ServerService
+        private readonly serverService: ServerService,
+        private readonly databaseService: DatabaseService
     ) {}
 
     async onModuleInit() {
@@ -72,7 +71,7 @@ export class CommandService implements OnModuleInit {
                     return interaction.editReply("Project ID and role are required.");
                 }
                 // Save server configuration
-                await this.database
+                await this.databaseService.drizzle
                     .insert(servers)
                     .values({
                         discordServerId: interaction.guildId,
@@ -80,7 +79,11 @@ export class CommandService implements OnModuleInit {
                         accessTimeChainId: chainId,
                         subscriberRoleId: role.id,
                         nonce,
-                        isVerified: false
+                        isVerified: false,
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                        lastSyncAt: new Date(),
+                        verificationSignature: zeroHash
                     })
                     .onConflictDoUpdate({
                         target: [servers.discordServerId],
@@ -125,7 +128,7 @@ export class CommandService implements OnModuleInit {
                 }
 
                 // Get server configuration
-                const serverData = await this.database.query.servers.findFirst({
+                const serverData = await this.databaseService.drizzle.query.servers.findFirst({
                     where: eq(servers.discordServerId, interaction.guildId)
                 });
 
@@ -148,7 +151,7 @@ export class CommandService implements OnModuleInit {
                 }
 
                 // Update server verification status
-                await this.database
+                await this.databaseService.drizzle
                     .update(servers)
                     .set({
                         isVerified: true,
@@ -300,7 +303,7 @@ export class CommandService implements OnModuleInit {
 
             try {
                 // Check if server is configured
-                const serverData = await this.database.query.servers.findFirst({
+                const serverData = await this.databaseService.drizzle.query.servers.findFirst({
                     where: eq(servers.discordServerId, interaction.guildId)
                 });
 
@@ -334,7 +337,7 @@ export class CommandService implements OnModuleInit {
 
             try {
                 // Get server configuration
-                const serverData = await this.database.query.servers.findFirst({
+                const serverData = await this.databaseService.drizzle.query.servers.findFirst({
                     where: eq(servers.discordServerId, interaction.guildId)
                 });
 
