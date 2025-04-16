@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { drizzle, NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { readFileSync } from "fs";
 import { resolve } from "path";
 import { Pool } from "pg";
 
@@ -14,7 +15,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
     constructor() {
         this.pool = new Pool({
-            connectionString: process.env.POSTGRES_CONNECTION_URI
+            connectionString: process.env.POSTGRES_CONNECTION_URI,
+            ssl:
+                process.env.POSTGRES_SSL == "true"
+                    ? {
+                          ca: readFileSync(process.env.POSTGRES_SSL_PATH)
+                      }
+                    : false
         });
 
         this.drizzle = drizzle(this.pool, { schema });
@@ -27,7 +34,6 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
             await migrate(this.drizzle, {
                 migrationsFolder: resolve("src/db/migrations"),
-                migrationsSchema: resolve("src/db/schema"),
                 migrationsTable: "__migrations"
             });
         } catch (error) {

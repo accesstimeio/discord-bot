@@ -2,15 +2,16 @@ import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ChatInputCommandInteraction, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
 import { eq } from "drizzle-orm";
 import { getAddress, Hash, isAddress, zeroAddress, zeroHash } from "viem";
+import { isSupportedChainId } from "@accesstimeio/accesstime-common";
 
 import { servers } from "src/db/schema";
+import { completeLinkWalletCommandInput, setupCommandInput, verifyCommandInput } from "src/types";
 
 import { DiscordService } from "../discord/discord.service";
 import { AccessTimeService } from "../accesstime/accesstime.service";
 import { WalletService } from "../wallet/wallet.service";
 import { ServerService } from "../server/server.service";
 import { DatabaseService } from "../database/database.service";
-import { isSupportedChainId } from "@accesstimeio/accesstime-common";
 
 @Injectable()
 export class CommandService implements OnModuleInit {
@@ -72,6 +73,17 @@ export class CommandService implements OnModuleInit {
                     return interaction.editReply("Project Id, Chain Id and role are required.");
                 }
 
+                const inputValidate = setupCommandInput.validate({
+                    project_id: projectId,
+                    chain_id: chainId
+                });
+
+                if (inputValidate.error && inputValidate.error.message) {
+                    return interaction.editReply(
+                        "Input validation failed, " + inputValidate.error.message
+                    );
+                }
+
                 if (!isSupportedChainId(Number(chainId))) {
                     return interaction.editReply("Chain Id is not supported.");
                 }
@@ -131,6 +143,12 @@ export class CommandService implements OnModuleInit {
 
                 if (!signature) {
                     return interaction.editReply("Signature is required.");
+                }
+
+                const inputValidate = verifyCommandInput.validate(signature);
+
+                if (inputValidate.error && inputValidate.error.message) {
+                    console.log("Input validation failed, " + inputValidate.error.message);
                 }
 
                 // Get server configuration
@@ -228,6 +246,15 @@ export class CommandService implements OnModuleInit {
 
                 if (!signature || !walletAddress) {
                     return interaction.editReply("Signature and wallet address are required.");
+                }
+
+                const inputValidate = completeLinkWalletCommandInput.validate({
+                    signature,
+                    wallet: walletAddress
+                });
+
+                if (inputValidate.error && inputValidate.error.message) {
+                    console.log("Input validation failed, " + inputValidate.error.message);
                 }
 
                 // Validate Ethereum address format
