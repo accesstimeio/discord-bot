@@ -1,10 +1,12 @@
 {
   "name": "discord-bot",
   "version": "0.0.1",
-  "description": "",
-  "author": "",
-  "private": true,
-  "license": "UNLICENSED",
+  "description": "🤖 AccessTime-integrated Discord bot for assigning roles to subscribers based on on-chain access rights. Built with discord.js + AccessTime SDK.",
+  "author": {
+    "name": "AccessTime",
+    "url": "https://github.com/accesstime.io"
+  },
+  "license": "MIT",
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
