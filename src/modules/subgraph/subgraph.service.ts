@@ -50,10 +50,11 @@ export class SubgraphService implements OnModuleInit {
         pageCursor?: string
     ): Promise<SubscriptionsResponse["accessTimeUsers"]> {
         try {
+            pageCursor ??= null;
             const result: SubscriptionsResponse = await this.client.request(SubscriptionsDocument, {
                 accessTimeAddress,
                 chainId,
-                after: pageCursor ?? ""
+                after: pageCursor
             });
 
             return result.accessTimeUsers;

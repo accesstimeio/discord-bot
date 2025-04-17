@@ -92,7 +92,7 @@ export class AccessTimeService {
                     (_subscription) =>
                         _subscription.address.toLowerCase() == user.walletAddress.toLowerCase()
                 );
-                const subscriptionEndTime = subscription ? 0 : Number(subscription.endTime);
+                const subscriptionEndTime = subscription ? Number(subscription.endTime) : 0;
 
                 // Existing subscription record
                 const existingSubscription =
@@ -191,17 +191,19 @@ export class AccessTimeService {
         accessTimeAddress: Address,
         chainId: number
     ): Promise<{ address: Address; endTime: string }[]> {
-        const call = this.subgraphService.fetchSubscription;
-
         let subscriptions: { address: Address; endTime: string }[] = [];
-        let nextPageCursor: string | null = "";
+        let nextPageCursor: string | null = null;
 
-        while (nextPageCursor == null) {
-            const result = await call(accessTimeAddress, chainId, nextPageCursor);
+        while (nextPageCursor != "") {
+            const result = await this.subgraphService.fetchSubscription(
+                accessTimeAddress,
+                chainId,
+                nextPageCursor
+            );
 
             subscriptions = subscriptions.concat(result.items);
 
-            nextPageCursor = result.pageInfo.hasNextPage ? result.pageInfo.endCursor : null;
+            nextPageCursor = result.pageInfo.hasNextPage ? result.pageInfo.endCursor : "";
         }
 
         return subscriptions;
