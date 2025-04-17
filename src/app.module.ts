@@ -3,7 +3,6 @@ import { ScheduleModule } from "@nestjs/schedule";
 import { ConfigModule } from "@nestjs/config";
 import * as Joi from "joi";
 
-import { AppController } from "./app.controller";
 import { CommandModule } from "./modules/command/command.module";
 
 const NODE_ENV = process.env.NODE_ENV;
@@ -24,8 +23,6 @@ const NODE_ENV = process.env.NODE_ENV;
         }),
         ScheduleModule.forRoot(),
         CommandModule
-    ],
-    controllers: [AppController],
-    providers: []
+    ]
 })
 export class AppModule {}
