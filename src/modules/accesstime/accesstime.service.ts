@@ -8,6 +8,7 @@ import { servers, subscriptions } from "src/db/schema";
 import { DatabaseService } from "../database/database.service";
 import { FactoryService } from "../factory/factory.service";
 import { DiscordService } from "../discord/discord.service";
+import { SubgraphService } from "../subgraph/subgraph.service";
 
 @Injectable()
 export class AccessTimeService {
@@ -16,7 +17,8 @@ export class AccessTimeService {
     constructor(
         private readonly databaseService: DatabaseService,
         private readonly factoryService: FactoryService,
-        private readonly discordService: DiscordService
+        private readonly discordService: DiscordService,
+        private readonly subgraphService: SubgraphService
     ) {}
 
     generateOwnershipSignatureMessage(projectId: string, chainId: string, nonce: string) {
@@ -53,27 +55,6 @@ export class AccessTimeService {
         }
     }
 
-    async fetchSubscription(projectId: string, chainId: string, user: Address) {
-        try {
-            const accessTime = await this.factoryService.client[Number(chainId)].read.contracts([
-                BigInt(projectId)
-            ]);
-
-            const contract = new AccessTime({
-                accessTime,
-                chain: {
-                    id: Number(chainId)
-                }
-            });
-            const endTime = await contract.read.accessTimes([user]);
-
-            return Number(endTime.toString());
-        } catch (error) {
-            this.logger.error("Error in fetchSubscription:", error);
-            return 0;
-        }
-    }
-
     async syncSubscriptions(serverId: string, subscriberRoleId: string) {
         let added: number = 0;
         let removed: number = 0;
@@ -88,10 +69,16 @@ export class AccessTimeService {
                 throw new Error("Server not configured or not verified");
             }
 
+            const chainId = Number(serverData.accessTimeChainId);
+            const accessTime = await this.factoryService.client[chainId].read.contracts([
+                BigInt(serverData.accessTimeProjectId)
+            ]);
+
             // Get all users with linked wallets for this server
             const usersWithWallets = await this.databaseService.drizzle.query.users.findMany({
                 where: (users, { not }) => not(eq(users.walletAddress, zeroAddress))
             });
+            const contractSubscriptions = await this.fetchAllSubscriptions(accessTime, chainId);
 
             const nowTime = Math.floor(Date.now() / 1000);
 
@@ -101,11 +88,11 @@ export class AccessTimeService {
                 }
 
                 // Check if user has active subscription
-                const subscriptionEndTime = await this.fetchSubscription(
-                    serverData.accessTimeProjectId,
-                    serverData.accessTimeChainId,
-                    user.walletAddress
+                const subscription = contractSubscriptions.find(
+                    (_subscription) =>
+                        _subscription.address.toLowerCase() == user.walletAddress.toLowerCase()
                 );
+                const subscriptionEndTime = subscription ? 0 : Number(subscription.endTime);
 
                 // Existing subscription record
                 const existingSubscription =
@@ -198,5 +185,25 @@ export class AccessTimeService {
             this.logger.error(`Error syncing subscriptions for server ${serverId}:`, error);
             throw error;
         }
+    }
+
+    async fetchAllSubscriptions(
+        accessTimeAddress: Address,
+        chainId: number
+    ): Promise<{ address: Address; endTime: string }[]> {
+        const call = this.subgraphService.fetchSubscription;
+
+        let subscriptions: { address: Address; endTime: string }[] = [];
+        let nextPageCursor: string | null = "";
+
+        while (nextPageCursor == null) {
+            const result = await call(accessTimeAddress, chainId, nextPageCursor);
+
+            subscriptions = subscriptions.concat(result.items);
+
+            nextPageCursor = result.pageInfo.hasNextPage ? result.pageInfo.endCursor : null;
+        }
+
+        return subscriptions;
     }
 }

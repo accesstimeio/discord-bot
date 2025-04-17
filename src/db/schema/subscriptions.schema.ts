@@ -10,7 +10,5 @@ export const subscriptions = pgTable(
         expiresAt: timestamp("expires_at").notNull(),
         updatedAt: timestamp("updated_at").notNull()
     },
-    (table) => ({
-        userServer: unique().on(table.userId, table.serverId)
-    })
+    (table) => [unique("userServer").on(table.userId, table.serverId)]
 );

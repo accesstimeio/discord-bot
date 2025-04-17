@@ -15,8 +15,11 @@ const NODE_ENV = process.env.NODE_ENV;
             isGlobal: true,
             validationSchema: Joi.object({
                 POSTGRES_CONNECTION_URI: Joi.string().required(),
+                POSTGRES_SSL: Joi.string().allow(["true", "false"]).required(),
+                POSTGRES_SSL_PATH: Joi.string(),
                 DISCORD_TOKEN: Joi.string().required(),
-                DISCORD_CLIENT_ID: Joi.string().required()
+                DISCORD_CLIENT_ID: Joi.string().required(),
+                SUBGRAPH_URL: Joi.string().required()
             })
         }),
         ScheduleModule.forRoot(),
