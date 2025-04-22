@@ -1,8 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
+import { InjectQueue } from "@nestjs/bullmq";
 
 import { AccessTimeService } from "../accesstime/accesstime.service";
 import { DatabaseService } from "../database/database.service";
+import { SyncQueue } from "../accesstime/accesstime.processor";
 
 @Injectable()
 export class ServerService {
@@ -11,7 +13,8 @@ export class ServerService {
 
     constructor(
         private readonly accessTimeService: AccessTimeService,
-        private readonly databaseService: DatabaseService
+        private readonly databaseService: DatabaseService,
+        @InjectQueue("accessTime") private accessTimeQueue: SyncQueue
     ) {}
 
     @Cron(CronExpression.EVERY_5_MINUTES)
@@ -27,14 +30,10 @@ export class ServerService {
                 for (const server of allServers) {
                     try {
                         if (server.subscriberRoleId) {
-                            const syncResult = await this.accessTimeService.syncSubscriptions(
-                                server.discordServerId,
-                                server.subscriberRoleId
-                            );
-
-                            this.logger.log(
-                                `Synced server ${server.discordServerId}: Added ${syncResult.added} roles, removed ${syncResult.removed} roles`
-                            );
+                            await this.accessTimeQueue.add("sync", {
+                                discordServerId: server.discordServerId,
+                                subscriberRoleId: server.subscriberRoleId
+                            });
                         }
                     } catch (error) {
                         this.logger.error(`Error syncing server ${server.discordServerId}:`, error);
