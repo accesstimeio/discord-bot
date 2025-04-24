@@ -64,6 +64,13 @@ export class CommandService implements OnModuleInit {
             await interaction.deferReply({ ephemeral: true });
 
             try {
+                const rl = await this.rateLimit(interaction.user.id);
+                if (!rl) {
+                    return interaction.editReply(
+                        "Rate limit exceeded, please wait some time then try again."
+                    );
+                }
+
                 const projectId = interaction.options.getString("project_id");
                 const chainId = interaction.options.getString("chain_id");
                 const role = interaction.options.getRole("role");
@@ -140,6 +147,13 @@ export class CommandService implements OnModuleInit {
             await interaction.deferReply({ ephemeral: true });
 
             try {
+                const rl = await this.rateLimit(interaction.user.id);
+                if (!rl) {
+                    return interaction.editReply(
+                        "Rate limit exceeded, please wait some time then try again."
+                    );
+                }
+
                 const signature = interaction.options.getString("signature");
 
                 if (!signature) {
@@ -207,6 +221,13 @@ export class CommandService implements OnModuleInit {
             await interaction.deferReply({ ephemeral: true });
 
             try {
+                const rl = await this.rateLimit(interaction.user.id);
+                if (!rl) {
+                    return interaction.editReply(
+                        "Rate limit exceeded, please wait some time then try again."
+                    );
+                }
+
                 // Generate message to sign
                 const messageToSign = await this.walletService.initiateWalletLinking(
                     interaction.guildId,
@@ -243,6 +264,13 @@ export class CommandService implements OnModuleInit {
             await interaction.deferReply({ ephemeral: true });
 
             try {
+                const rl = await this.rateLimit(interaction.user.id);
+                if (!rl) {
+                    return interaction.editReply(
+                        "Rate limit exceeded, please wait some time then try again."
+                    );
+                }
+
                 const signature = interaction.options.getString("signature");
                 const walletAddress = interaction.options.getString("wallet");
 
@@ -301,6 +329,13 @@ export class CommandService implements OnModuleInit {
             await interaction.deferReply({ ephemeral: true });
 
             try {
+                const rl = await this.rateLimit(interaction.user.id);
+                if (!rl) {
+                    return interaction.editReply(
+                        "Rate limit exceeded, please wait some time then try again."
+                    );
+                }
+
                 // Unlink wallet
                 const success = await this.walletService.unlinkWallet(
                     interaction.guildId,
@@ -337,6 +372,13 @@ export class CommandService implements OnModuleInit {
             await interaction.deferReply({ ephemeral: true });
 
             try {
+                const rl = await this.rateLimit(interaction.user.id);
+                if (!rl) {
+                    return interaction.editReply(
+                        "Rate limit exceeded, please wait some time then try again."
+                    );
+                }
+
                 // Check if server is configured
                 const serverData = await this.databaseService.drizzle.query.servers.findFirst({
                     where: eq(servers.discordServerId, interaction.guildId)
@@ -373,6 +415,13 @@ export class CommandService implements OnModuleInit {
             await interaction.deferReply({ ephemeral: true });
 
             try {
+                const rl = await this.rateLimit(interaction.user.id);
+                if (!rl) {
+                    return interaction.editReply(
+                        "Rate limit exceeded, please wait some time then try again."
+                    );
+                }
+
                 // Get server configuration
                 const serverData = await this.databaseService.drizzle.query.servers.findFirst({
                     where: eq(servers.discordServerId, interaction.guildId)
@@ -455,4 +504,27 @@ export class CommandService implements OnModuleInit {
             }
         }
     });
+
+    async rateLimit(userId: string) {
+        const key = `rl-${userId}`;
+        const maxAllowed = 5;
+
+        try {
+            let currentRate: number = 0;
+            const redisRate = await this.databaseService.redis.get(key);
+            if (redisRate) {
+                currentRate = isNaN(Number(redisRate)) ? 0 : Number(redisRate);
+            }
+
+            if (currentRate >= maxAllowed) {
+                return false;
+            }
+
+            await this.databaseService.redis.setex(key, 15, currentRate + 1);
+            return true;
+        } catch (error) {
+            this.logger.error(`Failed to update rate limit for user ${userId}:`, error);
+            return true;
+        }
+    }
 }
