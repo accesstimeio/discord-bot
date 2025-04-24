@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/commo
 import { drizzle, NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { readFileSync } from "fs";
+import Redis from "ioredis";
 import { resolve } from "path";
 import { Pool } from "pg";
 
@@ -12,6 +13,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(DatabaseService.name);
     private pool: Pool;
     public drizzle: NodePgDatabase<typeof schema>;
+    public redis: Redis;
 
     constructor() {
         this.pool = new Pool({
@@ -25,6 +27,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         });
 
         this.drizzle = drizzle(this.pool, { schema });
+
+        this.redis = new Redis(process.env.REDIS_URL);
     }
 
     async onModuleInit() {
@@ -44,5 +48,6 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
     async onModuleDestroy() {
         await this.pool.end();
+        this.redis.disconnect();
     }
 }
