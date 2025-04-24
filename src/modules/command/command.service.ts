@@ -98,6 +98,7 @@ export class CommandService implements OnModuleInit {
                         subscriberRoleId: role.id,
                         nonce,
                         isVerified: false,
+                        isSyncable: false,
                         createdAt: new Date(),
                         updatedAt: new Date(),
                         lastSyncAt: new Date(),
@@ -179,6 +180,7 @@ export class CommandService implements OnModuleInit {
                     .update(servers)
                     .set({
                         isVerified: true,
+                        isSyncable: true,
                         verificationSignature: signature,
                         updatedAt: new Date()
                     })
@@ -356,7 +358,9 @@ export class CommandService implements OnModuleInit {
                 );
             } catch (error) {
                 this.logger.error("Error in sync command:", error);
-                await interaction.editReply("Failed to sync subscriber roles. Please try again.");
+                await interaction.editReply(
+                    "Failed to sync subscriber roles. Please try again or check permissions."
+                );
             }
         }
     });
@@ -379,29 +383,8 @@ export class CommandService implements OnModuleInit {
                 }
 
                 // Get role info
-                let roleInfo = "Not configured";
-                let guildScope: boolean = false;
-                let botCorrectRoleHierarchy = false;
-                if (interaction.guild) {
-                    guildScope = true;
-
-                    if (serverData.subscriberRoleId) {
-                        const role = await interaction.guild.roles.fetch(
-                            serverData.subscriberRoleId
-                        ); // todo: interaction.guild comes as null?
-                        roleInfo = role ? `@${role.name}` : "Role not found";
-
-                        if (role) {
-                            const botMember = await interaction.guild.members.fetchMe();
-                            const targetRole = await interaction.guild.roles.fetch(
-                                serverData.subscriberRoleId
-                            );
-                            if (botMember.roles.highest.position > targetRole.position) {
-                                botCorrectRoleHierarchy = true;
-                            }
-                        }
-                    }
-                }
+                const { roleInfo, guildScope, correctRoleHierarchy } =
+                    await this.accessTimeService.checkIsSyncable(serverData.discordServerId);
 
                 // Get user wallet info
                 const userWallet = await this.walletService.getWalletByDiscordId(
@@ -455,7 +438,7 @@ export class CommandService implements OnModuleInit {
                         },
                         {
                             name: "Bot Role Hierarchy",
-                            value: botCorrectRoleHierarchy ? "✅ Correct" : "❌ Invalid",
+                            value: correctRoleHierarchy ? "✅ Correct" : "❌ Invalid",
                             inline: true
                         }
                     ],

@@ -94,7 +94,7 @@ export class DiscordService implements OnModuleInit {
 
     async assignRole(guildId: string, userId: string, roleId: string) {
         try {
-            const guild = await this.client.guilds.fetch(guildId);
+            const guild = await this.getGuild(guildId);
             const member = await guild.members.fetch(userId);
 
             await member.roles.add(roleId);
@@ -108,7 +108,7 @@ export class DiscordService implements OnModuleInit {
 
     async removeRole(guildId: string, userId: string, roleId: string) {
         try {
-            const guild = await this.client.guilds.fetch(guildId);
+            const guild = await this.getGuild(guildId);
             const member = await guild.members.fetch(userId);
 
             await member.roles.remove(roleId);
@@ -122,13 +122,22 @@ export class DiscordService implements OnModuleInit {
 
     async getGuildRoles(guildId: string) {
         try {
-            const guild = await this.client.guilds.fetch(guildId);
+            const guild = await this.getGuild(guildId);
             const roles = await guild.roles.fetch();
 
             return Array.from(roles.values());
         } catch (error) {
             this.logger.error(`Failed to get roles for guild ${guildId}:`, error);
             return [];
+        }
+    }
+
+    async getGuild(guildId: string) {
+        try {
+            return await this.client.guilds.fetch(guildId);
+        } catch (error) {
+            this.logger.error(`Failed to get guild ${guildId}:`, error);
+            return undefined;
         }
     }
 }

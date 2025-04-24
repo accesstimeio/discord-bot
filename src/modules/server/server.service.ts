@@ -23,7 +23,8 @@ export class ServerService {
             this.syncAllBusy = true;
             try {
                 const allServers = await this.databaseService.drizzle.query.servers.findMany({
-                    where: (servers, { eq }) => eq(servers.isVerified, true)
+                    where: (servers, { eq, and }) =>
+                        and(eq(servers.isVerified, true), eq(servers.isSyncable, true))
                 });
 
                 this.logger.log(`Starting sync for ${allServers.length} servers`);

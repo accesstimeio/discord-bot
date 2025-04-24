@@ -7,6 +7,7 @@ export const servers = pgTable("servers", {
     accessTimeChainId: text("accesstime_chain_id").notNull(),
     verificationSignature: text("verification_signature").notNull(),
     isVerified: boolean("is_verified").notNull(),
+    isSyncable: boolean("is_syncable").notNull(),
     subscriberRoleId: text("subscriber_role_id").notNull(),
     lastSyncAt: timestamp("last_sync_at").notNull(),
     nonce: text("nonce").notNull(), // Used for signature verification
